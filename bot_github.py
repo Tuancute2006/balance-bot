@@ -2,34 +2,23 @@ import requests
 import os
 from datetime import datetime
 
-# Cấu hình Telegram Bot
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', "8727925469:AAGDq2pNNekunJInbLVi9akdcri7zav-sfY")
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', 8114628397)
 
-# File để lưu số dư cũ
 BALANCE_FILE = "last_balance.txt"
-# File để kiểm tra đã gửi thông báo bắt đầu chưa
 STARTUP_FILE = "startup_sent.txt"
 
 def send_telegram_message(message):
-    """Gửi thông báo qua Telegram"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "HTML"
-    }
+    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
-        response = requests.post(url, json=payload, timeout=5)
-        return response.status_code == 200
-    except Exception as e:
-        print(f"  ❌ Lỗi gửi Telegram: {e}")
+        r = requests.post(url, json=payload, timeout=5)
+        return r.status_code == 200
+    except:
         return False
 
 def get_user_data():
-    """Lấy dữ liệu người dùng từ API"""
     url = "https://www.locgoh5.top/vn-app-server/app/v1/user/personalHomepage"
-    
     headers = {
         "accept": "*/*",
         "accept-language": "vi-VN",
@@ -42,132 +31,85 @@ def get_user_data():
         "request-paycode": "VN",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
-    
     try:
-        response = requests.post(url, headers=headers, json={}, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
+        resp = requests.post(url, headers=headers, json={}, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
             if data.get("code") == "0":
                 user_data = data["data"]
-                nickname = user_data.get("nickName", "N/A")
-                income = int(float(user_data.get("income", 0)))
-                return nickname, income
-            else:
-                print(f"  ❌ API lỗi: {data.get('msg')}")
-                return None, None
-        else:
-            print(f"  ❌ HTTP {response.status_code}")
-            return None, None
-    except Exception as e:
-        print(f"  ❌ Lỗi kết nối: {e}")
+                return user_data.get("nickName", "N/A"), int(float(user_data.get("income", 0)))
+        return None, None
+    except:
         return None, None
 
 def format_money(amount):
-    """Format số tiền với dấu chấm phân cách"""
     return f"{amount:,} VND".replace(",", ".")
 
-def read_last_balance():
-    """Đọc số dư lần trước từ file"""
+def read_balance():
     try:
         with open(BALANCE_FILE, 'r') as f:
-            return int(f.read().strip())
+            return int(f.read())
     except:
         return None
 
-def save_last_balance(balance):
-    """Lưu số dư hiện tại vào file"""
+def write_balance(balance):
     with open(BALANCE_FILE, 'w') as f:
         f.write(str(balance))
 
-def should_send_startup_message():
-    """Kiểm tra đã gửi thông báo bắt đầu chưa"""
+def already_started():
     try:
-        with open(STARTUP_FILE, 'r') as f:
-            return False  # Đã gửi rồi
+        with open(STARTUP_FILE, 'r'):
+            return True
     except:
-        return True  # Chưa gửi
+        return False
 
-def mark_startup_sent():
-    """Đánh dấu đã gửi thông báo bắt đầu"""
+def mark_started():
     with open(STARTUP_FILE, 'w') as f:
         f.write(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 def main():
-    """Chạy kiểm tra 1 lần (mỗi lần GitHub Actions gọi)"""
-    # Lấy thời gian hiện tại
-    current_time = datetime.now().strftime('%H:%M:%S')
-    
-    # Lấy dữ liệu người dùng
-    nickname, current_balance = get_user_data()
-    
-    if nickname is None:
-        nickname = "conmeocute"
-    
-    # Gửi thông báo bắt đầu (chỉ 1 lần duy nhất)
-    if should_send_startup_message() and current_balance is not None:
-        startup_message = f"🚀 <b>BOT ĐÃ BẮT ĐẦU CHẠY</b> 🚀\n\n"
-        startup_message += f"👤 @{nickname}\n"
-        startup_message += f"💰 <b>Số dư gốc:</b> {format_money(current_balance)}\n"
-        startup_message += f"⏱️  Kiểm tra mỗi <b>5 phút</b>\n"
-        startup_message += f"📊 Đang theo dõi biến động số dư..."
-        
-        if send_telegram_message(startup_message):
-            mark_startup_sent()
-            # Lưu số dư gốc làm mốc ban đầu
-            save_last_balance(current_balance)
-            print("  ✅ Đã gửi thông báo bắt đầu")
-        else:
-            print("  ❌ Gửi thông báo bắt đầu thất bại")
-    
-    # In tiêu đề
     print("=" * 50)
     print("   THEO DÕI BIẾN ĐỘNG SỐ DƯ")
     print("=" * 50)
-    print(f"📱 Telegram: @zenitsu2006z")
-    print(f"⏱️  Cập nhật: mỗi 5 phút (GitHub Actions)")
-    print("=" * 50)
-    print()
     
-    # Lấy dữ liệu (lấy lại để đảm bảo mới nhất)
-    nickname, current_balance = get_user_data()
+    nickname, current = get_user_data()
+    if current is None:
+        print("❌ Không lấy được dữ liệu")
+        return
     
-    if current_balance is not None:
-        # Hiển thị dòng thông tin
-        display_line = f"[{current_time}] 👤 {nickname} | 💰 {format_money(current_balance)}"
-        print(display_line)
+    print(f"👤 {nickname} | 💰 {format_money(current)}")
+    
+    # ---- Lần đầu chạy ----
+    if not already_started():
+        msg = f"🚀 BOT ĐÃ BẮT ĐẦU CHẠY 🚀\n\n👤 @{nickname}\n💰 Số dư gốc: {format_money(current)}\n⏱️ Kiểm tra mỗi 5 phút"
+        if send_telegram_message(msg):
+            mark_started()
+            write_balance(current)  # Lưu số dư gốc
+            print("✅ Đã gửi thông báo bắt đầu")
+        return
+    
+    # ---- Kiểm tra biến động ----
+    last = read_balance()
+    if last is None:
+        write_balance(current)
+        print("📝 Đã lưu số dư hiện tại")
+        return
+    
+    if current != last:
+        change = current - last
+        symbol = "+" if change > 0 else ""
         
-        # Lấy số dư cũ từ file
-        last_balance = read_last_balance()
+        msg = f"👤 @{nickname}\n💰 {format_money(current)}\n🔄 {symbol}{format_money(abs(change))}"
         
-        # Kiểm tra biến động (chỉ gửi khi có thay đổi)
-        if last_balance is not None and current_balance != last_balance:
-            change = current_balance - last_balance
-            change_symbol = "+" if change > 0 else ""
-            
-            # In thông báo biến động
-            print(f"  ⚡ BIẾN ĐỘNG: {change_symbol}{format_money(abs(change))}")
-            
-            # Tin nhắn Telegram - 3 DÒNG
-            message = f"👤 @{nickname}\n"
-            message += f"💰 Số dư hiện tại: {format_money(current_balance)}\n"
-            message += f"🔄 Chênh lệch: {change_symbol}{format_money(abs(change))}"
-            
-            if send_telegram_message(message):
-                print("  ✅ Đã gửi thông báo Telegram")
-                # Cập nhật số dư mới sau khi gửi thông báo
-                save_last_balance(current_balance)
-            else:
-                print("  ❌ Gửi thông báo thất bại")
-        elif last_balance is None and not should_send_startup_message():
-            # Trường hợp đã gửi thông báo start nhưng chưa có số dư
-            save_last_balance(current_balance)
-            print("  📝 Đã lưu số dư hiện tại")
-        elif last_balance is not None and current_balance == last_balance:
-            print("  ✅ Không có biến động")
+        if send_telegram_message(msg):
+            write_balance(current)  # ✅ QUAN TRỌNG: Cập nhật số dư mới
+            print(f"⚡ Đã gửi biến động: {symbol}{format_money(abs(change))}")
+        else:
+            print("❌ Gửi thất bại")
     else:
-        print("  ❌ Không lấy được dữ liệu")
+        print("✅ Không có biến động")
     
-    print()
+    print("=" * 50)
 
 if __name__ == "__main__":
     try:
