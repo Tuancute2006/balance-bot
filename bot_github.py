@@ -6,11 +6,13 @@ from datetime import datetime
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', "8727925469:AAGDq2pNNekunJInbLVi9akdcri7zav-sfY")
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', 8114628397)
 
-# File để lưu số dư cũ (giống biến last_balance trong code laptop)
+# File để lưu số dư cũ
 BALANCE_FILE = "last_balance.txt"
+# File để kiểm tra đã gửi thông báo bắt đầu chưa
+STARTUP_FILE = "startup_sent.txt"
 
 def send_telegram_message(message):
-    """Gửi thông báo qua Telegram (giống hệt code laptop)"""
+    """Gửi thông báo qua Telegram"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
@@ -25,7 +27,7 @@ def send_telegram_message(message):
         return False
 
 def get_user_data():
-    """Lấy dữ liệu người dùng từ API (giống hệt code laptop)"""
+    """Lấy dữ liệu người dùng từ API"""
     url = "https://www.locgoh5.top/vn-app-server/app/v1/user/personalHomepage"
     
     headers = {
@@ -61,11 +63,11 @@ def get_user_data():
         return None, None
 
 def format_money(amount):
-    """Format số tiền với dấu chấm phân cách (giống hệt code laptop)"""
+    """Format số tiền với dấu chấm phân cách"""
     return f"{amount:,} VND".replace(",", ".")
 
 def read_last_balance():
-    """Đọc số dư lần trước từ file (thay thế cho biến last_balance trong RAM)"""
+    """Đọc số dư lần trước từ file"""
     try:
         with open(BALANCE_FILE, 'r') as f:
             return int(f.read().strip())
@@ -73,21 +75,52 @@ def read_last_balance():
         return None
 
 def save_last_balance(balance):
-    """Lưu số dư hiện tại vào file (thay thế cho biến last_balance trong RAM)"""
+    """Lưu số dư hiện tại vào file"""
     with open(BALANCE_FILE, 'w') as f:
         f.write(str(balance))
 
+def should_send_startup_message():
+    """Kiểm tra đã gửi thông báo bắt đầu chưa"""
+    try:
+        with open(STARTUP_FILE, 'r') as f:
+            return False  # Đã gửi rồi
+    except:
+        return True  # Chưa gửi
+
+def mark_startup_sent():
+    """Đánh dấu đã gửi thông báo bắt đầu"""
+    with open(STARTUP_FILE, 'w') as f:
+        f.write(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
 def main():
     """Chạy kiểm tra 1 lần (mỗi lần GitHub Actions gọi)"""
-    # Lấy thời gian hiện tại
+    # Lấy thời gian hiện tại và nickname
     current_time = datetime.now().strftime('%H:%M:%S')
     
-    # In tiêu đề đẹp (giống code laptop nhưng không xóa màn hình)
+    # Lấy thông tin người dùng để tag tên
+    nickname, _ = get_user_data()
+    if nickname is None:
+        nickname = "conmeocute"
+    
+    # Gửi thông báo bắt đầu (chỉ 1 lần duy nhất)
+    if should_send_startup_message():
+        startup_message = f"🚀 <b>BOT ĐÃ BẮT ĐẦU CHẠY</b> 🚀\n\n"
+        startup_message += f"👤 @{nickname}\n"
+        startup_message += f"⏱️  Kiểm tra mỗi <b>5 phút</b>\n"
+        startup_message += f"📊 Đang theo dõi biến động số dư..."
+        
+        if send_telegram_message(startup_message):
+            mark_startup_sent()
+            print("  ✅ Đã gửi thông báo bắt đầu")
+        else:
+            print("  ❌ Gửi thông báo bắt đầu thất bại")
+    
+    # In tiêu đề
     print("=" * 50)
     print("   THEO DÕI BIẾN ĐỘNG SỐ DƯ")
     print("=" * 50)
     print(f"📱 Telegram: @zenitsu2006z")
-    print(f"⏱️  Cập nhật: mỗi 10 phút (GitHub Actions)")
+    print(f"⏱️  Cập nhật: mỗi 5 phút (GitHub Actions)")
     print("=" * 50)
     print()
     
@@ -95,25 +128,25 @@ def main():
     nickname, current_balance = get_user_data()
     
     if current_balance is not None:
-        # Hiển thị dòng thông tin (giống code laptop)
+        # Hiển thị dòng thông tin
         display_line = f"[{current_time}] 👤 {nickname} | 💰 {format_money(current_balance)}"
         print(display_line)
         
-        # Lấy số dư cũ từ file (thay cho biến last_balance)
+        # Lấy số dư cũ từ file
         last_balance = read_last_balance()
         
-        # Lưu số dư hiện tại (để lần sau so sánh)
+        # Lưu số dư hiện tại
         save_last_balance(current_balance)
         
-        # Kiểm tra biến động (giống hệt logic code laptop)
+        # Kiểm tra biến động
         if last_balance is not None and current_balance != last_balance:
             change = current_balance - last_balance
             change_symbol = "+" if change > 0 else ""
             
-            # In thông báo biến động (giống code laptop)
+            # In thông báo biến động
             print(f"  ⚡ BIẾN ĐỘNG: {change_symbol}{format_money(abs(change))}")
             
-            # Tin nhắn Telegram - CHỈ 3 DÒNG (giống hệt code laptop)
+            # Tin nhắn Telegram - 3 DÒNG
             message = f"👤 @{nickname}\n"
             message += f"💰 Số dư hiện tại: {format_money(current_balance)}\n"
             message += f"🔄 Chênh lệch: {change_symbol}{format_money(abs(change))}"
