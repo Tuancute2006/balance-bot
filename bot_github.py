@@ -94,23 +94,27 @@ def mark_startup_sent():
 
 def main():
     """Chạy kiểm tra 1 lần (mỗi lần GitHub Actions gọi)"""
-    # Lấy thời gian hiện tại và nickname
+    # Lấy thời gian hiện tại
     current_time = datetime.now().strftime('%H:%M:%S')
     
-    # Lấy thông tin người dùng để tag tên
-    nickname, _ = get_user_data()
+    # Lấy dữ liệu người dùng
+    nickname, current_balance = get_user_data()
+    
     if nickname is None:
         nickname = "conmeocute"
     
     # Gửi thông báo bắt đầu (chỉ 1 lần duy nhất)
-    if should_send_startup_message():
+    if should_send_startup_message() and current_balance is not None:
         startup_message = f"🚀 <b>BOT ĐÃ BẮT ĐẦU CHẠY</b> 🚀\n\n"
         startup_message += f"👤 @{nickname}\n"
+        startup_message += f"💰 <b>Số dư gốc:</b> {format_money(current_balance)}\n"
         startup_message += f"⏱️  Kiểm tra mỗi <b>5 phút</b>\n"
         startup_message += f"📊 Đang theo dõi biến động số dư..."
         
         if send_telegram_message(startup_message):
             mark_startup_sent()
+            # Lưu số dư gốc làm mốc ban đầu
+            save_last_balance(current_balance)
             print("  ✅ Đã gửi thông báo bắt đầu")
         else:
             print("  ❌ Gửi thông báo bắt đầu thất bại")
@@ -124,7 +128,7 @@ def main():
     print("=" * 50)
     print()
     
-    # Lấy dữ liệu
+    # Lấy dữ liệu (lấy lại để đảm bảo mới nhất)
     nickname, current_balance = get_user_data()
     
     if current_balance is not None:
@@ -135,10 +139,7 @@ def main():
         # Lấy số dư cũ từ file
         last_balance = read_last_balance()
         
-        # Lưu số dư hiện tại
-        save_last_balance(current_balance)
-        
-        # Kiểm tra biến động
+        # Kiểm tra biến động (chỉ gửi khi có thay đổi)
         if last_balance is not None and current_balance != last_balance:
             change = current_balance - last_balance
             change_symbol = "+" if change > 0 else ""
@@ -153,11 +154,15 @@ def main():
             
             if send_telegram_message(message):
                 print("  ✅ Đã gửi thông báo Telegram")
+                # Cập nhật số dư mới sau khi gửi thông báo
+                save_last_balance(current_balance)
             else:
                 print("  ❌ Gửi thông báo thất bại")
-        elif last_balance is None:
-            print("  📝 Lần đầu chạy, đã lưu số dư hiện tại")
-        else:
+        elif last_balance is None and not should_send_startup_message():
+            # Trường hợp đã gửi thông báo start nhưng chưa có số dư
+            save_last_balance(current_balance)
+            print("  📝 Đã lưu số dư hiện tại")
+        elif last_balance is not None and current_balance == last_balance:
             print("  ✅ Không có biến động")
     else:
         print("  ❌ Không lấy được dữ liệu")
